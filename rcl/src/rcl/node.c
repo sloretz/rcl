@@ -26,6 +26,7 @@ extern "C"
 
 #include "rcl/error_handling.h"
 #include "rcl/rcl.h"
+#include "rcl/remap.h"
 #include "rcutils/filesystem.h"
 #include "rcutils/find.h"
 #include "rcutils/format_string.h"
@@ -145,6 +146,7 @@ rcl_node_init(
     rcl_guard_condition_get_default_options();
   rcl_ret_t ret;
   rcl_ret_t fail_ret = RCL_RET_ERROR;
+  char * remapped_node_name = NULL;
 
   // Check options and allocator first, so allocator can be used for errors.
   RCL_CHECK_ARGUMENT_FOR_NULL(options, RCL_RET_INVALID_ARGUMENT, rcl_get_default_allocator());
@@ -292,6 +294,20 @@ rcl_node_init(
   node_security_options.enforce_security = (0 == strcmp(ros_enforce_security, "Enforce")) ?
     RMW_SECURITY_ENFORCEMENT_ENFORCE : RMW_SECURITY_ENFORCEMENT_PERMISSIVE;
 
+  // Remap the input name
+  ret = rcl_remap_node_name(
+    NULL,
+    true,
+    name,
+    *allocator,
+    &remapped_node_name);
+  if (RCL_RET_OK != ret) {
+    goto fail;
+  } else if (NULL != remapped_node_name) {
+    name = remapped_node_name;
+  }
+  // From this point on all return statements should goto cleanup instead.
+
   if (!use_security) {
     node_security_options.enforce_security = RMW_SECURITY_ENFORCEMENT_PERMISSIVE;
   } else {  // if use_security
@@ -308,7 +324,8 @@ rcl_node_init(
         if (should_free_local_namespace_) {
           allocator->deallocate((char *)local_namespace_, allocator->state);
         }
-        return RCL_RET_ERROR;
+        ret = RCL_RET_ERROR;
+        goto cleanup;
       }
     }
   }
@@ -348,7 +365,8 @@ rcl_node_init(
     goto fail;
   }
   RCUTILS_LOG_DEBUG_NAMED(ROS_PACKAGE_NAME, "Node initialized")
-  return RCL_RET_OK;
+  ret = RCL_RET_OK;
+  goto cleanup;
 fail:
   if (node->impl) {
     if (node->impl->logger_name) {
@@ -381,7 +399,12 @@ fail:
     allocator->deallocate((char *)local_namespace_, allocator->state);
     local_namespace_ = NULL;
   }
-  return fail_ret;
+  ret = fail_ret;
+cleanup:
+  if (NULL != remapped_node_name) {
+    allocator->deallocate(remapped_node_name, allocator->state);
+  }
+  return ret;
 }
 
 rcl_ret_t
