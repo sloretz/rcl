@@ -230,7 +230,7 @@ rcl_node_init(
   // Remap the node name and namespace if remap rules are given
   ret = rcl_remap_node_name(
     NULL,
-    true,
+    node->impl->options.use_global_arguments,
     name,
     *allocator,
     &remapped_node_name);
@@ -242,7 +242,7 @@ rcl_node_init(
   char * remapped_namespace = NULL;
   ret = rcl_remap_node_namespace(
     NULL,
-    true,
+    node->impl->options.use_global_arguments,
     local_namespace_,
     *allocator,
     &remapped_namespace);
